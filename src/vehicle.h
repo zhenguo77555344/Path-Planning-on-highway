@@ -19,9 +19,8 @@ double change_right(double weight_crash, double weight_buffer, double weight_sav
 		double diff_front_s, double diff_after_s, double our_vehicle_v,
 		double front_vehicle_v, double after_vehicle_v, double max_v, int PATH_SIZE);
 */
-
 bool vehicle(vector<double> prediction_front, vector<double> prediction_left_right,
 		double &ref_vel, double &lane, double max_v);
-
+bool vehicle(vector<float> prediction_front, vector<float> prediction_left_right,double &ref_vel, double &lane, double max_v);
 
 #endif

@@ -9,9 +9,18 @@ using namespace std;
 vector<double> getXY(double s, double d, const vector<double> &maps_s, const vector<double> &maps_x, const vector<double> &maps_y);
 
 
-vector<vector<double>> trajectory(const vector<double> &pre_path_x, const vector<double> &pre_path_y, double ref_x,
-	double ref_y, double ref_yaw, bool change_lane, int PATH_SIZE,double car_s, const vector<double> &map_waypoints_x,
-	const vector<double> &map_waypoints_y, const vector<double> &map_waypoints_s, double lane, double ref_vel)
+vector<vector<double>> trajectory(const vector<double> &pre_path_x, 
+								  const vector<double> &pre_path_y, 
+								  double ref_x,
+								  double ref_y, 
+								  double ref_yaw, 
+								  bool change_lane, 
+								  int PATH_SIZE,
+								  double car_s, 
+								  const vector<double> &map_waypoints_x,
+								  const vector<double> &map_waypoints_y, 
+								  const vector<double> &map_waypoints_s, 
+								  double lane, double ref_vel)
 {
 	vector<double> spine_x,spine_y;
 	vector<double> next_x_vals, next_y_vals;

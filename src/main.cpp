@@ -8,172 +8,28 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
-#include "spline.h"
+//#include "spline.h"
+#include "helpers.h"
 
-//what I do
+#include "PathPlaner.h"
+
 #include "prediction.h"
 #include "vehicle.h"
 #include "trajectory.h"
 
-
 using namespace std;
-
-// for convenience
 using json = nlohmann::json;
-
-// For converting back and forth between radians and degrees.
-constexpr double pi() { return M_PI; }
-double deg2rad(double x) { return x * pi() / 180; }
-double rad2deg(double x) { return x * 180 / pi(); }
-
-// Checks if the SocketIO event has JSON data.
-// If there is data the JSON object in string format will be returned,
-// else the empty string "" will be returned.
-string hasData(string s) {
-  auto found_null = s.find("null");
-  auto b1 = s.find_first_of("[");
-  auto b2 = s.find_first_of("}");
-  if (found_null != string::npos) {
-    return "";
-  } else if (b1 != string::npos && b2 != string::npos) {
-    return s.substr(b1, b2 - b1 + 2);
-  }
-  return "";
-}
-
-double distance(double x1, double y1, double x2, double y2)
-{
-	return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
-}
-int ClosestWaypoint(double x, double y, const vector<double> &maps_x, const vector<double> &maps_y)
-{
-
-	double closestLen = 100000; //large number
-	int closestWaypoint = 0;
-
-	for(int i = 0; i < maps_x.size(); i++)
-	{
-		double map_x = maps_x[i];
-		double map_y = maps_y[i];
-		double dist = distance(x,y,map_x,map_y);
-		if(dist < closestLen)
-		{
-			closestLen = dist;
-			closestWaypoint = i;
-		}
-
-	}
-
-	return closestWaypoint;
-
-}
-
-int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x, const vector<double> &maps_y)
-{
-
-	int closestWaypoint = ClosestWaypoint(x,y,maps_x,maps_y);
-
-	double map_x = maps_x[closestWaypoint];
-	double map_y = maps_y[closestWaypoint];
-
-	double heading = atan2((map_y-y),(map_x-x));
-
-	double angle = fabs(theta-heading);
-  angle = min(2*pi() - angle, angle);
-
-  if(angle > pi()/4)
-  {
-    closestWaypoint++;
-  if (closestWaypoint == maps_x.size())
-  {
-    closestWaypoint = 0;
-  }
-  }
-
-  return closestWaypoint;
-}
-
-// Transform from Cartesian x,y coordinates to Frenet s,d coordinates
-vector<double> getFrenet(double x, double y, double theta, const vector<double> &maps_x, const vector<double> &maps_y)
-{
-	int next_wp = NextWaypoint(x,y, theta, maps_x,maps_y);
-
-	int prev_wp;
-	prev_wp = next_wp-1;
-	if(next_wp == 0)
-	{
-		prev_wp  = maps_x.size()-1;
-	}
-
-	double n_x = maps_x[next_wp]-maps_x[prev_wp];
-	double n_y = maps_y[next_wp]-maps_y[prev_wp];
-	double x_x = x - maps_x[prev_wp];
-	double x_y = y - maps_y[prev_wp];
-
-	// find the projection of x onto n
-	double proj_norm = (x_x*n_x+x_y*n_y)/(n_x*n_x+n_y*n_y);
-	double proj_x = proj_norm*n_x;
-	double proj_y = proj_norm*n_y;
-
-	double frenet_d = distance(x_x,x_y,proj_x,proj_y);
-
-	//see if d value is positive or negative by comparing it to a center point
-
-	double center_x = 1000-maps_x[prev_wp];
-	double center_y = 2000-maps_y[prev_wp];
-	double centerToPos = distance(center_x,center_y,x_x,x_y);
-	double centerToRef = distance(center_x,center_y,proj_x,proj_y);
-
-	if(centerToPos <= centerToRef)
-	{
-		frenet_d *= -1;
-	}
-
-	// calculate s value
-	double frenet_s = 0;
-	for(int i = 0; i < prev_wp; i++)
-	{
-		frenet_s += distance(maps_x[i],maps_y[i],maps_x[i+1],maps_y[i+1]);
-	}
-
-	frenet_s += distance(0,0,proj_x,proj_y);
-
-	return {frenet_s,frenet_d};
-
-}
-
-// Transform from Frenet s,d coordinates to Cartesian x,y
-// use spline to optimize the original interplotation method 
-vector<double> getXY(double s, double d, const vector<double> &maps_s, const vector<double> &maps_x, const vector<double> &maps_y)
-{
-
-	int prev_wp = -1;
-	while(s > maps_s[prev_wp+1] && (prev_wp < (int)(maps_s.size()-1) ))
-	{
-		prev_wp++;
-	}
-	int wp2 = (prev_wp+1)%maps_x.size();
-	double heading = atan2((maps_y[wp2]-maps_y[prev_wp]),(maps_x[wp2]-maps_x[prev_wp]));
-	double seg_s = (s-maps_s[prev_wp]);
-	double seg_x = maps_x[prev_wp]+seg_s*cos(heading);
-	double seg_y = maps_y[prev_wp]+seg_s*sin(heading);
-	double perp_heading = heading-pi()/2;
-	double x = seg_x + d*cos(perp_heading);
-	double y = seg_y + d*sin(perp_heading);
-	return {x,y};
-
-}
-
 int main() {
   uWS::Hub h;
 
+	cout<<"Hello Udacity PPP"<<endl;
   // Load up map values for waypoint's x,y,s and d normalized normal vectors
   vector<double> map_waypoints_x;
   vector<double> map_waypoints_y;
   vector<double> map_waypoints_s;
   vector<double> map_waypoints_dx;
   vector<double> map_waypoints_dy;
-
+	
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
@@ -200,10 +56,8 @@ int main() {
   	map_waypoints_dx.push_back(d_x);
   	map_waypoints_dy.push_back(d_y);
   }
-
   double lane = 1;
   double ref_vel = 0;
-
   h.onMessage([&ref_vel,&lane,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -213,6 +67,7 @@ int main() {
     //cout << sdata << endl;
     if (length && length > 2 && data[0] == '4' && data[1] == '2') {
 
+      SENSOR_FUSION_LIST sensor_data;
       auto s = hasData(data);
 
       if (s != "") {
@@ -221,6 +76,8 @@ int main() {
         string event = j[0].get<string>();
         
         if (event == "telemetry") {
+
+          //sensor_data.perception.capacity;
           // j[1] is the data JSON object
           
         	// Main car's localization Data
@@ -231,6 +88,15 @@ int main() {
           	double car_yaw = j[1]["yaw"];
           	double car_speed = j[1]["speed"];
 
+            sensor_data.main_car_localization.car_position_x = j[1]["x"];
+            sensor_data.main_car_localization.car_position_y = j[1]["y"];
+            sensor_data.main_car_localization.car_position_s = j[1]["s"];
+            sensor_data.main_car_localization.car_position_d = j[1]["d"];
+            sensor_data.main_car_localization.car_yaw = j[1]["yaw"];
+            sensor_data.main_car_localization.car_velocity = j[1]["speed"];
+
+            cout<<"Main car's location"<<","<<car_x<<","<<car_y<<","<<car_s<<","<<car_d<<","<<car_yaw<<","<<car_speed<<endl;
+
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
           	auto previous_path_y = j[1]["previous_path_y"];
@@ -238,16 +104,44 @@ int main() {
           	double end_path_s = j[1]["end_path_s"];
           	double end_path_d = j[1]["end_path_d"];
 
+            cout<<"Previous path"<<","<<previous_path_x<<","<<previous_path_y<<","<<end_path_s<<","<<end_path_d<<endl;
+
           	// Sensor Fusion Data, a list of all other cars on the same side of the road.
           	auto sensor_fusion = j[1]["sensor_fusion"];
+
+            vector<SENSOR_FUSION> perception_test(20);
+            
+            //sensor_data.perception.at(0).car_ID = 1;//out of range
+            //SENSOR_TEST testValue(10);
+            //testValue.vector_test
+            //SENSOR_FUSION_LIST * test_data_set = new SENSOR_FUSION_LIST;   
+            //test_data_set->perception.at(0).car_ID = 1;          
+
+            cout<<"Sensor Fusion"<<",";
+            for(int i = 0;i<sensor_fusion.size();i++){
+              cout<<sensor_fusion.at(i)<<",";
+              
+              perception_test.at(i).car_ID = sensor_fusion.at(i)[0]; 
+              perception_test.at(i).car_position_x = sensor_fusion.at(i)[1];
+              perception_test.at(i).car_position_y = sensor_fusion.at(i)[2];
+              perception_test.at(i).car_velocity_x = sensor_fusion.at(i)[3];
+              perception_test.at(i).car_velocity_y = sensor_fusion.at(i)[4];
+              perception_test.at(i).car_position_s = sensor_fusion.at(i)[5];
+              perception_test.at(i).car_position_d = sensor_fusion.at(i)[6];
+
+              sensor_data.perception.push_back(perception_test.at(i));
+          
+            }
+            cout<<endl;
 
           	json msgJson;
 
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
 
-          	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-		
+          	//define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
+		//*************************************************//
+
 		int PATH_SIZE = 30;
 		double max_v = 49.5;
 
@@ -257,25 +151,33 @@ int main() {
 
 		int path_size = previous_path_x.size();
 		double future_car_s = end_path_s;
+
+    
+    //vehicle_localization.car_ID = sensor_fusion.at()
+
+    PATHPLANER lattice(sensor_data,0.02);
+    //lattice.trajectories_sample();
 		
 		//get the diff of s and v betwen the front vehicle
-		vector<double> predict_front =  prediction_front(sensor_fusion, path_size, lane, future_car_s);
+    vector<float> predict_front = lattice.predication_within_lane(path_size, lane, future_car_s);
 
 		//get the diff of s and v betwen the front and after vehicle, when our vehicle change lane to left or right.
-		vector<double> predict_left_right = prediction_left_right(sensor_fusion,path_size, lane, future_car_s);
+    vector<float> predict_left_right = lattice.predication_neighbour_lane(path_size, lane, future_car_s);
 
 		//Using finite state machines and cost function to choose the best state.
 		//the ref_vel and lane will be changed in this function.
 		//return bool change_lane, representative the lane change or not.
-		bool change_lane = vehicle(predict_front, predict_left_right, ref_vel, lane, max_v);
-		
+		bool change_lane = lattice.veicle_state_machine(predict_front, predict_left_right, ref_vel, lane, max_v);
 		//generate the trajectory points.
-		vector<vector<double>> traject = trajectory(previous_path_x, previous_path_y, ref_x, ref_y, ref_yaw, change_lane,
-			       	PATH_SIZE, car_s, map_waypoints_x, map_waypoints_y, map_waypoints_s, lane, ref_vel);
-	
+    vector<vector<double>> traject = lattice.trajectories_sample(previous_path_x, previous_path_y, ref_x, ref_y, ref_yaw, change_lane,PATH_SIZE, car_s, map_waypoints_x, map_waypoints_y, map_waypoints_s, lane, ref_vel);
 
-          	msgJson["next_x"] = traject[0];
-          	msgJson["next_y"] = traject[1];
+    next_x_vals = traject[0];
+    next_y_vals = traject[1];
+		//****************************************************//
+            
+
+          	msgJson["next_x"] = next_x_vals;
+          	msgJson["next_y"] = next_y_vals;
 
           	auto msg = "42[\"control\","+ msgJson.dump()+"]";
 
